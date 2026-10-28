@@ -58,15 +58,27 @@ jest.mock('expo-haptics', () => ({
   notificationAsync: jest.fn(),
 }));
 
-jest.mock('socket.io-client', () => ({
-  __esModule: true,
-  default: jest.fn(() => ({
+jest.mock('@microsoft/signalr', () => {
+  const connection = {
     on: jest.fn(),
-    emit: jest.fn(),
     off: jest.fn(),
-    disconnect: jest.fn(),
-  })),
-}));
+    start: jest.fn(() => Promise.resolve()),
+    stop: jest.fn(() => Promise.resolve()),
+    invoke: jest.fn(() => Promise.resolve()),
+  };
+  const builder = {
+    withUrl: jest.fn(() => builder),
+    withAutomaticReconnect: jest.fn(() => builder),
+    configureLogging: jest.fn(() => builder),
+    build: jest.fn(() => connection),
+  };
+  return {
+    __esModule: true,
+    HubConnectionBuilder: jest.fn(() => builder),
+    HttpTransportType: { WebSockets: 1 },
+    LogLevel: { Warning: 3 },
+  };
+});
 
 jest.mock('expo-font', () => ({
   __esModule: true,

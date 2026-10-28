@@ -24,46 +24,71 @@ default:
       - .npm/
       - node_modules/
 
+.dotnet:
+  image: mcr.microsoft.com/dotnet/sdk:10.0
+  needs: []
+  cache: []
+
 install:
   stage: install
   script:
     - npm ci --cache .npm --prefer-offline
 
-lint:
+client:lint:
   stage: lint
   needs: ['install']
   script:
-    - npm run lint
+    - npm run lint -w client
 
-typecheck:
+client:typecheck:
   stage: typecheck
   needs: ['install']
   script:
-    - npx tsc --noEmit
+    - npm run typecheck -w client
 
-test:
+client:test:
   stage: test
   needs: ['install']
   script:
-    - npm run test -- --passWithNoTests --coverage
+    - npm run test -w client -- --passWithNoTests --coverage
   coverage: '/Lines\s*:\s*(\d+\.?\d*)%/'
   artifacts:
     when: always
     reports:
       coverage_report:
         coverage_format: cobertura
-        path: coverage/cobertura-coverage.xml
+        path: client/coverage/cobertura-coverage.xml
     paths:
-      - coverage/
+      - client/coverage/
     expire_in: 30 days
 
-build:web:
+client:build:web:
   stage: build
   needs: ['install']
   script:
-    - npx expo export --platform web
+    - npm run build:web -w client
   artifacts:
     name: '$CI_COMMIT_REF_SLUG-frontend-web-build'
     paths:
-      - dist/
+      - client/dist/
     expire_in: 7 days
+
+server:lint:
+  extends: .dotnet
+  stage: lint
+  script:
+    - dotnet format server/Peerly.slnx --verify-no-changes
+
+server:test:
+  extends: .dotnet
+  stage: test
+  services:
+    - name: postgres:17-alpine
+      alias: postgres
+  variables:
+    POSTGRES_DB: peerly_test
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: postgres
+    TEST_DATABASE_CONNECTION_STRING: Host=postgres;Database=peerly_test;Username=postgres;Password=postgres
+  script:
+    - dotnet test server/Peerly.slnx

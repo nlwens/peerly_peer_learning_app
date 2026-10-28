@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
+import { Alert, View, Text, StyleSheet, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { io, Socket } from 'socket.io-client';
 import { useRouter } from 'expo-router';
+import type { HubConnection } from '@microsoft/signalr';
 
 import { COLORS } from '@/constants/theme';
-import { API_BASE_URL } from '@/shared/api/config';
 import { apiFetch } from '@/shared/api/client';
+import { createRealtimeConnection } from '@/shared/api/realtime';
 import { getAccessToken, getLoggedInUserId } from '@/shared/store/auth';
 import { fetchUserById } from '@/features/users/api/homeUsers';
 import type { User } from '@/features/users/data/types';
@@ -38,7 +38,7 @@ export default function ChatTestScreen({ otherUserId }: Props) {
   // Use cache hook for real-time updates
   const cachedMessages = useConversation(me || '', otherUserId);
 
-  const socketRef = useRef<Socket | null>(null);
+  const connectionRef = useRef<HubConnection | null>(null);
   const flatListRef = useRef<FlatList<Message>>(null);
 
   // Update messages from cache when available
@@ -115,14 +115,10 @@ export default function ChatTestScreen({ otherUserId }: Props) {
       return;
     }
 
-    const socket = io(API_BASE_URL, {
-      transports: ['websocket'],
-      auth: { token },
-    });
+    const connection = createRealtimeConnection(token);
+    connectionRef.current = connection;
 
-    socketRef.current = socket;
-
-    socket.on('receive_message', (message: Message) => {
+    connection.on('ReceiveMessage', (message: Message) => {
       const isForThisConversation =
         (message.sender_id === me && message.receiver_id === otherUserId) ||
         (message.sender_id === otherUserId && message.receiver_id === me);
@@ -138,9 +134,11 @@ export default function ChatTestScreen({ otherUserId }: Props) {
       // UI updates from cache store listener
     });
 
+    connection.start().catch((e) => console.log('Chat connection failed', e));
+
     return () => {
-      socket.disconnect();
-      socketRef.current = null;
+      void connection.stop();
+      connectionRef.current = null;
     };
   }, [me, otherUserId]);
 
@@ -153,14 +151,14 @@ export default function ChatTestScreen({ otherUserId }: Props) {
 
   const onSend = async () => {
     const content = draft.trim();
-    if (!content || !me || !socketRef.current) return;
+    if (!content || !me || !connectionRef.current) return;
 
-    socketRef.current.emit('send_message', {
-      receiver_id: otherUserId,
-      content,
-    });
-
-    setDraft('');
+    try {
+      await connectionRef.current.invoke('SendMessage', otherUserId, content);
+      setDraft('');
+    } catch (e) {
+      Alert.alert('Message not sent', e instanceof Error ? e.message : 'Please try again.');
+    }
   };
 
   const title = useMemo(() => otherUser?.name ?? 'Chat', [otherUser]);

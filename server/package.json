@@ -1,0 +1,10 @@
+{
+  "name": "server",
+  "private": true,
+  "scripts": {
+    "dev": "dotnet watch run --project src --launch-profile http",
+    "build": "dotnet build Peerly.slnx -c Release",
+    "lint": "dotnet format Peerly.slnx --verify-no-changes",
+    "test": "dotnet test Peerly.slnx"
+  }
+}

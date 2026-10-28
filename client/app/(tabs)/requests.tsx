@@ -1,6 +1,5 @@
 import { router } from 'expo-router';
 import { useEffect } from 'react';
-import { io, Socket } from 'socket.io-client';
 import RequestsScreen from '@/features/requests/screens/RequestsScreen';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet } from 'react-native';
@@ -8,7 +7,7 @@ import PeerlyButton from '@/shared/components/ui/PeerlyButton';
 import { COLORS } from '@/constants/theme';
 import { loadRequests, removeRequestById, upsertRequestFromSocket } from '@/features/requests/store/requestsStore';
 import { useAuth, getAccessToken } from '@/shared/store/auth';
-import { API_BASE_URL } from '@/shared/api/config';
+import { createRealtimeConnection } from '@/shared/api/realtime';
 
 export default function RequestsRoute() {
   const { loggedInUserId, hydrated } = useAuth();
@@ -24,26 +23,24 @@ export default function RequestsRoute() {
     const token = getAccessToken();
     if (!token) return;
 
-    const socket: Socket = io(API_BASE_URL, {
-      transports: ['websocket'],
-      auth: { token },
-    });
+    const connection = createRealtimeConnection(token);
 
-    socket.on('request_created', (request) => {
+    connection.on('RequestCreated', (request) => {
       void upsertRequestFromSocket(request);
     });
 
-    socket.on('request_updated', (request) => {
+    connection.on('RequestUpdated', (request) => {
       void upsertRequestFromSocket(request);
     });
 
-    socket.on('request_deleted', (payload: { id?: string }) => {
-      if (!payload?.id) return;
-      void removeRequestById(payload.id);
+    connection.on('RequestDeleted', (requestId: string) => {
+      void removeRequestById(requestId);
     });
+
+    connection.start().catch((e) => console.log('Realtime connection failed', e));
 
     return () => {
-      socket.disconnect();
+      void connection.stop();
     };
   }, [hydrated, loggedInUserId]);
 
